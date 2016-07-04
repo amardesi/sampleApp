@@ -1,0 +1,6 @@
+adapter: mysql2
+host: HOSTNAME
+port: PORT
+database: DB
+username: USERNAME
+password: PASSWORD

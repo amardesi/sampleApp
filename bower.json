@@ -1,0 +1,28 @@
+{
+  "name": "subu-app",
+  "version": "0.1.0",
+  "authors": [
+    "Martin Haye <martin.haye@ucop.edu>"
+  ],
+  "description": "",
+  "main": "",
+  "moduleType": [],
+  "license": "MIT",
+  "homepage": "",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "bootstrap": ">=4.0.0-alpha",
+    "jquery": ">=2.1.4",
+    "react": ">=0.13.3",
+    "underscore": ">=1.8.3",
+    "tether": ">=1.2.0",
+    "iframe-resizer": ">=3.5.3"
+  }
+}

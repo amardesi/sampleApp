@@ -1,0 +1,9 @@
+bin/
+.bundle/
+bower_components/
+config/
+Gemfile.lock
+gems/
+node_modules/
+public/css/
+public/js/
