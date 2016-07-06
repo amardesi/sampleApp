@@ -55,7 +55,7 @@ gulp.task('watch', function() {
 })
 
 gulp.task('sinatra', function() {
-  sinatraProc = spawn('ruby', ['escholApp.rb', '-p', '8082'], { stdio: 'inherit' })
+  sinatraProc = spawn('ruby', ['escholApp.rb', '-p', '4001'], { stdio: 'inherit' })
 })
 
 gulp.task('express', function() {

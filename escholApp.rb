@@ -38,10 +38,7 @@ STDOUT.sync = true
 
 ###################################################################################################
 # Use the Sequel gem to get connection pooling, thread safety, etc.
-conf = ConfigParser.new("#{$homeDir}/.passwords/ojs_db_pw.mysql")['mysql']
-DB = Sequel.connect(:adapter=>'mysql2', 
-                    :host=>conf['host'], :database=>conf['database'], 
-                    :user=>conf['user'], :password=>conf['password'])
+DB = Sequel.connect(YAML.load_file("config/database.yaml"))
 
 class User < Sequel::Model
   set_primary_key :user_id
@@ -109,6 +106,7 @@ end
 def genAppPage(title, request, initialData)
   root = request.path_info.gsub(%r{[^/]+}, '..').sub(%r{^/../..}, '../').sub(%r{/..}, '')
   pageName = request.path_info.sub(%r{^/}, '').sub(%r{/.*$}, '')
+  puts "\n\n path=#{request.path_info} root=#{root} pageName=#{pageName}\n\n"
 
   # Most of the boilerplate below is directly from Bootstrap's recommended framework
   return cacheBustAll(%{
@@ -126,7 +124,6 @@ def genAppPage(title, request, initialData)
         <script src="#{root}lib/jquery/dist/jquery.min.js"></script>
         <script src="#{root}lib/underscore/underscore.js"></script>
         <script src="#{root}lib/tether/dist/js/tether.js"></script> <!-- needed by bootstrap -->
-        <script src="#{root}lib/iframe-resizer/js/iframeResizer.contentWindow.js"></script>
       </head>
       <body>
         <script>
@@ -157,11 +154,11 @@ end
 ###################################################################################################
 # Up-ness check so 'eye' can tell we're running
 get "/check" do
-  "batchImpExp running"
+  "#{__FILE__} running"
 end
 
 ###################################################################################################
-# Batch operations page
-get "/batchOps" do
-  genAppPage("Batch Operations", request, { :entity => params['entity'] })
+# Unit landing page
+get "/unit/:unitID" do |unitID|
+  genAppPage("Unit landing page", request, { :unitID => unitID })
 end
