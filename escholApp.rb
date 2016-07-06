@@ -11,12 +11,9 @@ $homeDir    = ENV['HOME'] or raise("No HOME in env")
 $scriptDir  = getRealPath "#{__FILE__}/.."
 
 ###################################################################################################
-# External code modules
+# External gems we need
 require 'cgi'
-require 'configparser'
-require 'dbm'
 require 'digest'
-require 'fileutils'
 require 'json'
 require 'net/http'
 require 'pp'
@@ -30,35 +27,24 @@ require 'sinatra-websocket'
 require 'unindent'
 require 'yaml'
 
-# Don't use Webrick, as sinatra-websocket requires thin
+# Don't use Webrick, as sinatra-websocket requires 'thin', and 'thin' is better anyway.
 set :server, 'thin'
 
-# Flush stdout after each write
+# Flush stdout after each write, which makes debugging easier.
 STDOUT.sync = true
 
 ###################################################################################################
 # Use the Sequel gem to get connection pooling, thread safety, etc.
 DB = Sequel.connect(YAML.load_file("config/database.yaml"))
 
-class User < Sequel::Model
-  set_primary_key :user_id
-  one_to_many :escholRoles
-end
-
-# eSchol roles table
-class EscholRole < Sequel::Model
-  many_to_one :user
-end
-
 ###################################################################################################
-# Need to retain session as a cookie so we can get usernames, and validate the user is logged in
-# (except when fetching resources from /lib)
-before do
-  return if request.path =~ %r{^/(lib/|check)}
-  # TODO
-  #Thread.current[:cookies] = cookies
-  #params['subiSession'] and cookies[:subiSession] = params['subiSession']
-  #getSessionUsername() or halt(401, "Not authorized")
+# Model classes for interacting with the database
+class Unit < Sequel::Model
+  unrestrict_primary_key
+end
+
+class UnitHier < Sequel::Model(:unit_hier)
+  unrestrict_primary_key
 end
 
 ###################################################################################################
@@ -106,7 +92,6 @@ end
 def genAppPage(title, request, initialData)
   root = request.path_info.gsub(%r{[^/]+}, '..').sub(%r{^/../..}, '../').sub(%r{/..}, '')
   pageName = request.path_info.sub(%r{^/}, '').sub(%r{/.*$}, '')
-  puts "\n\n path=#{request.path_info} root=#{root} pageName=#{pageName}\n\n"
 
   # Most of the boilerplate below is directly from Bootstrap's recommended framework
   return cacheBustAll(%{
@@ -141,24 +126,14 @@ def genAppPage(title, request, initialData)
 end
 
 ###################################################################################################
-def returnApiData(params, result)
-  if params['init']
-    content_type :js
-    "initialData = #{result.to_json}"
-  else
-    content_type :json
-    result.to_json
-  end
-end
-
-###################################################################################################
-# Up-ness check so 'eye' can tell we're running
-get "/check" do
-  "#{__FILE__} running"
-end
-
-###################################################################################################
 # Unit landing page
 get "/unit/:unitID" do |unitID|
-  genAppPage("Unit landing page", request, { :unitID => unitID })
+  unit = Unit[unitID]
+  genAppPage("Unit landing page", request, { 
+    :id => unitID,
+    :name => unit.name,
+    :type => unit.type,
+    :parents => UnitHier.filter(:unit_id => unitID, :is_direct => true).map { |hier| hier.ancestor_unit },
+    :children => UnitHier.filter(:ancestor_unit => unitID, :is_direct => true).map { |hier| hier.unit_id }
+  })
 end
