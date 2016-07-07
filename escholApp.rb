@@ -17,13 +17,10 @@ require 'digest'
 require 'json'
 require 'net/http'
 require 'pp'
-require 'rubyXL'
-require 'sanitize'
 require 'sequel'
 require 'sinatra'
 require 'sinatra/reloader' if development?
 require 'sinatra/cookies'
-require 'sinatra-websocket'
 require 'unindent'
 require 'yaml'
 
