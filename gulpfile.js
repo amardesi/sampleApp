@@ -27,7 +27,7 @@ gulp.task('templates', function() {
   gulp.src(paths.templates)
     .pipe(sourcemaps.init())
     .pipe(babel({
-      presets: ['react']
+      presets: ['react', 'es2015']
     }))
     .on('error', function(err) {
       console.log("" + err)
