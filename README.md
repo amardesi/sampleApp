@@ -36,10 +36,10 @@ Description of files
 * `styles`: Where we go to set and add CSS styles. Uses SCSS so macros, variables, etc. are available. These get compiled (through Gulp) into public/css/.
 * `templates`: Where we go to add and change React code for the UI. These get compiled (through Gulp) into public/js/.
 
-Steps to get the eSchol5 sample app running
--------------------------------------------
+Steps to get the app running
+----------------------------
 
-1. Install gems and packages: `./setup.sh`
+1. Install gems and packages: `./setup.sh` (Note: for neatness they get installed to the local directory, not system-wide)
 
 2. Start proxy connection to database through bastion: `ssh -C -N -L3306:rds-pub-eschol-dev.cmcguhglinoa.us-west-2.rds.amazonaws.com:3306 -p 18822 cdl-aws-bastion.cdlib.org`
 

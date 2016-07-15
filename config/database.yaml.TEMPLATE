@@ -1,3 +1,4 @@
+# Database connection parameters
 adapter: mysql2
 host: HOSTNAME
 port: PORT

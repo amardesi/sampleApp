@@ -1,5 +1,13 @@
 #!/usr/bin/env ruby
 
+# This script converts data from old eScholarship into the new eschol5 database.
+# It should generally be run on a newly cleaned-out database. This sequence of commands
+# should do the trick:
+#
+# bin/sequel config/database.yaml -m migrations/ -M 0 && \
+# bin/sequel config/database.yaml -m migrations/ && \
+# ./convert.rb /path/to/allStruct.xml
+
 # Use bundler to keep dependencies local
 require 'rubygems'
 require 'bundler/setup'
@@ -13,9 +21,10 @@ require 'sequel'
 require 'time'
 require 'yaml'
 
+# Connect to the database into which we'll place data
 DB = Sequel.connect(YAML.load_file("config/database.yaml"))
-OLD_DB = Sequel.connect(YAML.load_file("config/oldStats.yaml"))
 
+# Model classes for easy object-relational mapping in the database
 class Unit < Sequel::Model
   unrestrict_primary_key
 end
@@ -24,6 +33,8 @@ class UnitHier < Sequel::Model(:unit_hier)
   unrestrict_primary_key
 end
 
+###################################################################################################
+# Insert hierarchy links (skipping dupes) for all descendants of the given unit id.
 def linkUnit(id, childMap, done)
   childMap[id].each_with_index { |child, idx|
     if !done.include?([id, child])
@@ -43,6 +54,8 @@ def linkUnit(id, childMap, done)
   }
 end
 
+###################################################################################################
+# Helper function for linkUnit
 def linkDescendants(id, child, childMap, done)
   childMap[child].each { |child2|
     if !done.include?([id, child2])
@@ -61,6 +74,8 @@ def linkDescendants(id, child, childMap, done)
   }
 end
 
+###################################################################################################
+# Convert an allStruct element, and all its child elements, into the database.
 def convertUnits(el, parentMap, childMap)
   id = el[:id] || el[:ref] || "root"
   #puts "name=#{el.name} id=#{id.inspect} name=#{el[:label].inspect}"
@@ -103,18 +118,23 @@ def convertUnits(el, parentMap, childMap)
     convertUnits(child, parentMap, childMap)
   }
 
-  # After traversing the whole thing, it's safe to form all the links
+  # After traversing the whole thing, it's safe to form all the hierarchy links
   if el.name == "allStruct"
     puts "Linking units."
     linkUnit("root", childMap, Set.new)
   end
 end
 
+###################################################################################################
+# Main action begins here
+
+# Check command-line format
 if ARGV.length != 1
   STDERR.puts "Usage: #{__FILE__} path/to/allStruct.xml"
   exit 1
 end
 
+# Let the user know what we're doing
 puts "Converting units."
 startTime = Time.now
 
@@ -127,4 +147,5 @@ DB.transaction do
   }
 end
 
+# All done.
 puts "  Elapsed: #{Time.now - startTime} sec"
