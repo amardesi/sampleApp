@@ -1,4 +1,8 @@
-// Page content for unit landing page
+// Page content for unit landing page.
+//
+// Note: automatically has access to all Components defined in global.jsx, such as
+// <Header>, <Footer>, etc.
+//
 class UnitPage extends React.Component
 {
   render() { 
@@ -34,5 +38,6 @@ class UnitPage extends React.Component
   }
 }
 
-// Render everything under the single top-level div created in the base HTML
+// Render everything under the single top-level div created in the base HTML. As its
+// initial properties, pass it the chunk of initialData included in the base HTML.
 ReactDOM.render(<UnitPage {...initialData}/>, document.getElementById('uiBase'))

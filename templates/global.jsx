@@ -1,3 +1,4 @@
+// Header present on almost every page
 class Header extends React.Component 
 {
   render() { return(
@@ -8,6 +9,7 @@ class Header extends React.Component
   )}
 }
 
+// Footer present on almost every page
 class Footer extends React.Component 
 {
   render() { return(
