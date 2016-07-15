@@ -1,11 +1,10 @@
+# Ruby gems required by this application
 source 'https://rubygems.org'
-gem 'configparser'
-gem 'json'
-gem 'mysql2'
-gem 'nokogiri'
-gem 'sequel'
-gem 'sinatra'
-gem 'sinatra-contrib'
-gem 'sinatra-websocket'
-gem 'sqlite3'
-gem 'unindent'
+gem 'json'                # safely and quickly parsing and generating JSON data
+gem 'mysql2'              # connecting to the database
+gem 'nokogiri'            # parsing and generating XML
+gem 'sequel'              # object-relational mapper (including migrations)
+gem 'sinatra'             # lightweight web framework
+gem 'sinatra-contrib'     # standard extensions for Sinatra
+gem 'sinatra-websocket'   # web socket support for Sinatra
+gem 'unindent'            # remove indentation from lines of a string
