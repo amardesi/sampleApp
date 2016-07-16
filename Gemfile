@@ -7,4 +7,5 @@ gem 'sequel'              # object-relational mapper (including migrations)
 gem 'sinatra'             # lightweight web framework
 gem 'sinatra-contrib'     # standard extensions for Sinatra
 gem 'sinatra-websocket'   # web socket support for Sinatra
+gem 'sqlite3'             # for local testing without remote Mysql database
 gem 'unindent'            # remove indentation from lines of a string

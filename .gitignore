@@ -7,3 +7,4 @@ gems/
 node_modules/
 public/css/
 public/js/
+test.db
