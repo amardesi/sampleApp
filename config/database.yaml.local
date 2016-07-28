@@ -1,2 +1,2 @@
 adapter: sqlite
-database: /Users/mhaye/Projects/eschol5/sampleApp/test.db
+database: test.db
