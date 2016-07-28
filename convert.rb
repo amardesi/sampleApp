@@ -263,15 +263,20 @@ end
 
 # Convert all the items
 puts "Converting items."
+ALL_UNITs = Set.new(Unit.select(:id).map { |row| row[:id] })
 DB.transaction do
+  nDone = 0
   iterateRecords(ARGV[1]) { |doc|
     begin
       convertItem(doc)
+      nDone += 1
     rescue Exception => e
       puts doc
       raise      
     end
+    (nDone % 100) == 0 and puts "#{nDone} done."
   }
+  puts "#{nDone} done."
 end
 
 # All done.
