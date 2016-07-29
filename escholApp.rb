@@ -44,6 +44,10 @@ class UnitHier < Sequel::Model(:unit_hier)
   unrestrict_primary_key
 end
 
+class Item < Sequel::Model
+  unrestrict_primary_key
+end
+
 ###################################################################################################
 # CACHE BUSTING
 # =============
@@ -197,8 +201,13 @@ end
 
 ###################################################################################################
 # Item view page.
-get "/uc/item/:shortArk" do |shortArk|
+get "/item/:shortArk" do |shortArk|
   item = Item["qt"+shortArk]
   
-  # FIXME: Martin make this work
+  # Initial data for the page consists of the item's id and title.
+  # Andy, hack here.
+  genAppPage("Item view", request, { 
+    :id => shortArk,
+    :title => item.title
+  })
 end
