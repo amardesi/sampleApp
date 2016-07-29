@@ -194,3 +194,11 @@ get "/unit/:unitID" do |unitID|
     :children => UnitHier.filter(:ancestor_unit => unitID, :is_direct => true).map { |hier| hier.unit_id }
   })
 end
+
+###################################################################################################
+# Item view page.
+get "/uc/item/:shortArk" do |shortArk|
+  item = Item["qt"+shortArk]
+  
+  # FIXME: Martin make this work
+end
