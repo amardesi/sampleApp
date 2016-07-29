@@ -44,6 +44,10 @@ class UnitHier < Sequel::Model(:unit_hier)
   unrestrict_primary_key
 end
 
+class Item < Sequel::Model
+  unrestrict_primary_key
+end
+
 ###################################################################################################
 # CACHE BUSTING
 # =============
@@ -192,5 +196,18 @@ get "/unit/:unitID" do |unitID|
     :type => unit.type,
     :parents => UnitHier.filter(:unit_id => unitID, :is_direct => true).map { |hier| hier.ancestor_unit },
     :children => UnitHier.filter(:ancestor_unit => unitID, :is_direct => true).map { |hier| hier.unit_id }
+  })
+end
+
+###################################################################################################
+# Item view page.
+get "/item/:shortArk" do |shortArk|
+  item = Item["qt"+shortArk]
+  
+  # Initial data for the page consists of the item's id and title.
+  # Andy, hack here.
+  genAppPage("Item view", request, { 
+    :id => shortArk,
+    :title => item.title
   })
 end
