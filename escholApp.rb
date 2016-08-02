@@ -48,6 +48,10 @@ class Item < Sequel::Model
   unrestrict_primary_key
 end
 
+class UnitItem < Sequel::Model
+  unrestrict_primary_key
+end
+
 ###################################################################################################
 # CACHE BUSTING
 # =============
@@ -190,12 +194,15 @@ get "/unit/:unitID" do |unitID|
   # children and parents drawn from the unit_hier database table. Remember that "direct" links are
   # direct parents and children. "Indirect" (which we don't use here) are for grandparents/ancestors,
   # and grand-children/descendants.
+  items = UnitItem.filter(:unit_id => unitID, :is_direct => true)
   genAppPage("Unit landing page", request, { 
     :id => unitID,
     :name => unit.name,
     :type => unit.type,
     :parents => UnitHier.filter(:unit_id => unitID, :is_direct => true).map { |hier| hier.ancestor_unit },
-    :children => UnitHier.filter(:ancestor_unit => unitID, :is_direct => true).map { |hier| hier.unit_id }
+    :children => UnitHier.filter(:ancestor_unit => unitID, :is_direct => true).map { |hier| hier.unit_id },
+    :nItems => items.count,
+    :items => items.limit(10).map { |pair| pair.item_id }
   })
 end
 

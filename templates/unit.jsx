@@ -32,6 +32,15 @@ class UnitPage extends React.Component
               <li key={child_id}><a href={"/unit/"+child_id}>{child_id}</a></li>) }
           </ul>
         </div>
+        { p.items.length==0 ? null :
+            <div>
+              Items 1-{Math.min(10, p.nItems)} of {p.nItems}:
+              <ul>
+                { p.items.map((item_id) => 
+                  <li key={item_id}><a href={"/item/"+item_id.replace(/^qt/, "")}>{item_id}</a></li>) }
+              </ul>
+            </div>
+        }
         <Footer/>
       </div>
     )
