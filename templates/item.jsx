@@ -24,25 +24,25 @@ class ItemPage extends React.Component
             <ItemTabbed/>
           </div>
           <div className="col-sm-4">
-            <div class="card card-block">
-              <h4 class="card-title">Download</h4>
-              <a href="#" class="card-link">Link</a>
+            <div className="card card-block">
+              <h4 className="card-title">Download</h4>
+              <a href="#" className="card-link">Link</a>
             </div> 
-            <div class="card card-block">
-              <h4 class="card-title">Buy</h4>
-              <a href="#" class="card-link">Link</a>
+            <div className="card card-block">
+              <h4 className="card-title">Buy</h4>
+              <a href="#" className="card-link">Link</a>
             </div> 
-            <div class="card card-block">
-              <h4 class="card-title">Share</h4>
-              <a href="#" class="card-link">Link</a>
+            <div className="card card-block">
+              <h4 className="card-title">Share</h4>
+              <a href="#" className="card-link">Link</a>
             </div>
-            <div class="card card-block">
-              <h4 class="card-title">Jump to:</h4>
-              <a href="#" class="card-link">Link</a>
+            <div className="card card-block">
+              <h4 className="card-title">Jump to:</h4>
+              <a href="#" className="card-link">Link</a>
             </div>
-            <div class="card card-block">
-              <h4 class="card-title">Related Items</h4>
-              <a href="#" class="card-link">Link</a>
+            <div className="card card-block">
+              <h4 className="card-title">Related Items</h4>
+              <a href="#" className="card-link">Link</a>
             </div>
           </div>
         </div>
