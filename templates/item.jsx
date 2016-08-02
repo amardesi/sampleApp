@@ -24,25 +24,25 @@ class ItemPage extends React.Component
             <ItemTabbed/>
           </div>
           <div className="col-sm-4">
-            <div class="card card-block">
-              <h4 class="card-title">Download</h4>
-              <a href="#" class="card-link">Link</a>
+            <div className="card card-block">
+              <h4 className="card-title">Download</h4>
+              <a href="#" className="card-link">Link</a>
             </div> 
-            <div class="card card-block">
-              <h4 class="card-title">Buy</h4>
-              <a href="#" class="card-link">Link</a>
+            <div className="card card-block">
+              <h4 className="card-title">Buy</h4>
+              <a href="#" className="card-link">Link</a>
             </div> 
-            <div class="card card-block">
-              <h4 class="card-title">Share</h4>
-              <a href="#" class="card-link">Link</a>
+            <div className="card card-block">
+              <h4 className="card-title">Share</h4>
+              <a href="#" className="card-link">Link</a>
             </div>
-            <div class="card card-block">
-              <h4 class="card-title">Jump to:</h4>
-              <a href="#" class="card-link">Link</a>
+            <div className="card card-block">
+              <h4 className="card-title">Jump to:</h4>
+              <a href="#" className="card-link">Link</a>
             </div>
-            <div class="card card-block">
-              <h4 class="card-title">Related Items</h4>
-              <a href="#" class="card-link">Link</a>
+            <div className="card card-block">
+              <h4 className="card-title">Related Items</h4>
+              <a href="#" className="card-link">Link</a>
             </div>
           </div>
         </div>
@@ -70,7 +70,7 @@ class Tab extends React.Component {
   render() { return(
     <li className="nav-item">
       <a className={this.props.isCurrent ? 'current' : null} 
-         onClick={this.handleClick}
+         onClick={this.handleClick.bind(this)}
          href={this.props.url}>{this.props.name}&nbsp;&nbsp;
       </a>
     </li>
@@ -170,7 +170,7 @@ class ItemTabbed extends React.Component {
       <Tabs
         currentTab={this.state.currentTab}
         tabList={this.state.tabList}
-        changeTab={this.changeTab}
+        changeTab={this.changeTab.bind(this)}
       />
       <Content currentTab={this.state.currentTab} />
     </div>
