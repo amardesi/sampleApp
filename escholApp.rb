@@ -215,6 +215,8 @@ get "/item/:shortArk" do |shortArk|
   # Andy, hack here.
   genAppPage("Item view", request, { 
     :id => shortArk,
-    :title => item.title
+    :title => item.title,
+    :rights => item.rights,
+    :pub_date => item.pub_date
   })
 end

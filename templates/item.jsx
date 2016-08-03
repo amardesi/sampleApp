@@ -15,13 +15,13 @@ class ItemPage extends React.Component
           <h2>Item: {p.id}</h2>
           Info:
           <ul>
-            <li>Title: {p.title}</li>
+            <li>Rights: {p.rights}</li>
           </ul>
         </div>
         <p>Breadcrumb and other journal specific header content here</p>
         <div className="row">
           <div className="col-sm-8">
-            <ItemTabbed/>
+            <ItemTabbed {...p}/>
           </div>
           <div className="col-sm-4">
             <div className="card card-block">
@@ -61,19 +61,32 @@ var tabList = [
   { 'id': 5, 'name': 'Comments', 'url': '/comments' }
 ];
 
-class Tab extends React.Component {
-  handleClick(e){
-    e.preventDefault();
-    this.props.handleClick();
+class ItemTabbed extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      tabList: tabList,
+      currentTab: 1
+    };
   }
-  
-  render() { return(
-    <li className="nav-item">
-      <a className={this.props.isCurrent ? 'current' : null} 
-         onClick={this.handleClick.bind(this)}
-         href={this.props.url}>{this.props.name}&nbsp;&nbsp;
-      </a>
-    </li>
+
+  changeTab(tab) {
+    this.setState({ currentTab: tab.id });
+  }
+
+  render() {
+    return(
+    <div>
+      <Tabs
+        currentTab={this.state.currentTab}
+        tabList={this.state.tabList}
+        changeTab={this.changeTab.bind(this)}
+      />
+      <ContentSwitch 
+        currentTab={this.state.currentTab} 
+        p={this.props}
+      />
+    </div>
   )}
 }
 
@@ -99,82 +112,89 @@ class Tabs extends React.Component {
   )}
 }
 
+class Tab extends React.Component {
+  handleClick(e){
+    e.preventDefault();
+    this.props.handleClick();
+  }
+  
+  render() { 
+    return(
+    <li className="nav-item">
+      <a className={this.props.isCurrent ? 'current' : null} 
+         onClick={this.handleClick.bind(this)}
+         href={this.props.url}>{this.props.name}&nbsp;&nbsp;
+      </a>
+    </li>
+  )}
+}
 
-class Content extends React.Component {
+class ContentSwitch extends React.Component {
   render() { return(
     <div>
-      {this.props.currentTab === 1 ? <ContentMain/> : null }
-      {this.props.currentTab === 2 ? <ContentSuppl/> : null}
-      {this.props.currentTab === 3 ? <ContentMetrics/> : null}
-      {this.props.currentTab === 4 ? <ContentAuthArt/> : null}
-      {this.props.currentTab === 5 ? <ContentComments/> : null}
+      {this.props.currentTab === 1 ? <ContentMain {...this.props.p}/> : null }
+      {this.props.currentTab === 2 ? <ContentSuppl {...this.props.p}/> : null}
+      {this.props.currentTab === 3 ? <ContentMetrics {...this.props.p}/> : null}
+      {this.props.currentTab === 4 ? <ContentAuthArt {...this.props.p}/> : null}
+      {this.props.currentTab === 5 ? <ContentComments {...this.props.p}/> : null}
     </div>
   )}
 }
 
 class ContentMain extends React.Component {
-  render() { return(
-    <div className="content">
-      Item main content here 
-    </div>
-  )}
+  render() { 
+    let p = this.props
+    return(
+      <div className="content">
+        {p.title} <br/>
+        {p.pub_date}
+      </div>
+    )
+  }
 }
 
 class ContentSuppl extends React.Component {
-  render() { return(
-    <div className="content">
-      Data &amp; Media content here
-    </div>
-  )}
+  render() { 
+    let p = this.props
+    return(
+      <div className="content">
+        Data &amp; Media content here
+      </div>
+    )
+  }
 }
 
 class ContentMetrics extends React.Component {
-  render() { return(
-    <div className="content">
-      Metrics content here
-    </div>
-  )}
+  render() { 
+    let p = this.props
+    return(
+      <div className="content">
+        Metrics content here
+      </div>
+    )
+  }
 }
 
 class ContentAuthArt extends React.Component {
-  render() { return(
-    <div className="content">
-      Author &amp; Article content here
-    </div>
-  )}
+  render() { 
+    let p = this.props
+    return(
+      <div className="content">
+        Author &amp; Article content here
+      </div>
+    )
+  }
 }
 
 class ContentComments extends React.Component {
-  render() { return(
-    <div className="content">
-      Comments content here
-    </div>
-  )}
-}
-
-class ItemTabbed extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = {
-      tabList: tabList,
-      currentTab: 1
-    };
+  render() { 
+    let p = this.props
+    return(
+      <div className="content">
+        Comments content here
+      </div>
+    )
   }
-
-  changeTab(tab) {
-    this.setState({ currentTab: tab.id });
-  }
-
-  render() { return(
-    <div>
-      <Tabs
-        currentTab={this.state.currentTab}
-        tabList={this.state.tabList}
-        changeTab={this.changeTab.bind(this)}
-      />
-      <Content currentTab={this.state.currentTab} />
-    </div>
-  )}
 }
 
 // Render everything under the single top-level div created in the base HTML. As its
