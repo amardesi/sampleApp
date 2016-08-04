@@ -6,7 +6,7 @@
 class ItemPage extends React.Component {
   constructor(props) {
     super(props)
-    this.state = {currentTab: props.currentTab}
+    this.state = {currentTab: Number(props.currentTab)}
   }
 
   changeTab(tab_id) {
