@@ -338,8 +338,13 @@ Thread.abort_on_exception = true
 prefilterThread = Thread.new { prefilterAll }
 indexThread = Thread.new { indexAll }
 
-QUEUE_DB.fetch("SELECT itemId FROM indexStates WHERE indexName='erep' ORDER BY itemId").each do |row|
-  $prefilterQueue << row[:itemId]
+QUEUE_DB.fetch("SELECT itemId, time FROM indexStates WHERE indexName='erep' ORDER BY itemId").each do |row|
+  erepTime = Time.at(row[:time].to_i).to_datetime
+  shortArk = row[:itemId].sub(%r{^ark:/?13030/}, '')
+  item = Item[shortArk]
+  if !item || item.last_indexed < erepTime
+    $prefilterQueue << shortArk
+  end
 end
 
 $prefilterQueue << nil  # end-of-queue
