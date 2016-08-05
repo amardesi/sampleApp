@@ -22,9 +22,6 @@ require 'sequel'
 require 'time'
 require 'yaml'
 
-# Local modules
-require_relative 'subprocess'
-
 # Special args
 $testMode = ARGV.delete('--test')
 
@@ -169,25 +166,19 @@ def convertUnits(el, parentMap, childMap)
 end
 
 ###################################################################################################
-def prefilterOne(itemID)
-  shortArk = itemID.sub(%r{^ark:/?13030/}, '')
-  $prefilterDirsFile or $prefilterDirsFile = open("prefilterDirs.txt", "w")
-  $prefilterDirsFile.puts "13030/pairtree_root/#{shortArk.scan(/\w\w/).join('/')}/#{shortArk}"
-  $prefilterDirsCount += 1
-  limit = $testMode ? 1 : 50
-  if $prefilterDirsCount >= limit
-    prefilterFlush
-  end
-end
+def prefilterBatch(batch)
 
-###################################################################################################
-def prefilterFlush
-  $prefilterDirsCount > 0 or return
-  $prefilterDirsFile.close
+  # Build a file with the relative directory names of all the items to prefilter in this batch
+  open("prefilterDirs.txt", "w") { |io|
+    batch.each { |itemID|
+      shortArk = itemID.sub(%r{^ark:/?13030/}, '')
+      io.puts "13030/pairtree_root/#{shortArk.scan(/\w\w/).join('/')}/#{shortArk}"
+    }
+  }
 
   # Run the XTF textIndexer in "prefilterOnly" mode. That way the stylesheets can do all the
   # dirty work of normalizing the various data formats, and we can use the uniform results.
-  puts "Running prefilter batch of #{$prefilterDirsCount} items."
+  puts "Running prefilter batch of #{batch.size} items."
   cmd = ["/apps/eschol/erep/xtf/bin/textIndexer", 
          "-prefilterOnly",
          "-force",
@@ -220,22 +211,22 @@ def prefilterFlush
     end
     File.delete "prefilterDirs.txt"
   }
-
-  # Get ready for more.
-  $prefilterDirsCount = 0
-  $prefilterDirsFile = nil
 end
 
 ###################################################################################################
 def prefilterAll
   Thread.current[:name] = "prefilter thread"
-  $prefilterDirsCount = 0
+  batch = []
   loop do
     itemID = $prefilterQueue.pop
     itemID or break
-    prefilterOne(itemID)
+    batch << itemID
+    if batch.size >= ($testMode ? 1 : 50)
+      prefilterBatch(batch)
+      batch = []
+    end
   end
-  prefilterFlush
+  batch.empty? or prefilterBatch(batch)
   $indexQueue << [nil, nil] # end-of-work
 end
 
