@@ -16,15 +16,34 @@ require 'bundler/setup'
 require 'date'
 require 'json'
 require 'nokogiri'
+require 'open3'
 require 'pp'
 require 'sequel'
 require 'time'
 require 'yaml'
 
-ALL_UNITS = Set.new
+# Local modules
+require_relative 'subprocess'
 
-# Connect to the database into which we'll place data
+# Special args
+$testMode = ARGV.delete('--test')
+
+# Connect to the databases we'll use
+QUEUE_DB = Sequel.connect(YAML.load_file("config/queueDb.yaml"))
 DB = Sequel.connect(YAML.load_file("config/database.yaml"))
+
+# Queues for thread coordination
+$prefilterQueue = SizedQueue.new($testMode ? 1 : 100)
+$indexQueue = SizedQueue.new($testMode ? 1 : 100)
+
+# Make puts thread-safe
+$stdoutMutex = Mutex.new
+def puts(*args)
+  $stdoutMutex.synchronize { 
+    Thread.current[:name] and STDOUT.write("[#{Thread.current[:name]}] ")
+    super(*args) 
+  }
+end
 
 ###################################################################################################
 # Monkey patches to make Nokogiri even more elegant
@@ -124,7 +143,6 @@ def convertUnits(el, parentMap, childMap)
       :is_active => el[:directSubmit] != "moribund",
       :attrs => JSON.generate(attrs)
     )
-    ALL_UNITS << id
   elsif el.name == "ref"
     # handled elsewhere
   end
@@ -151,25 +169,83 @@ def convertUnits(el, parentMap, childMap)
 end
 
 ###################################################################################################
-# Read a large XML file in piecemeal fashion, parsing each record individually. This saves a lot of
-# memory, and also lets us get started sooner during testing.
-def iterateRecords(filename)
-  io = (filename =~ /\.gz$/) ? Zlib::GzipReader.open(filename) : File.open(filename)
-  buf = []
-  io.each { |line|
-    if line =~ /<document>/
-      buf = [line]  # clears buf
-    elsif line =~ /<\/document>/
-      buf << line
-      str = buf.join("")
-      doc = Nokogiri::XML(str, nil, 'utf-8')
-      doc.remove_namespaces!
-      yield doc.root
-    else
-      buf << line.sub("><$", "")  # fix for nonstandard XTF encoding of attributes
+def prefilterOne(itemID)
+  shortArk = itemID.sub(%r{^ark:/?13030/}, '')
+  $prefilterDirsFile or $prefilterDirsFile = open("prefilterDirs.txt", "w")
+  $prefilterDirsFile.puts "13030/pairtree_root/#{shortArk.scan(/\w\w/).join('/')}/#{shortArk}"
+  $prefilterDirsCount += 1
+  limit = $testMode ? 1 : 50
+  if $prefilterDirsCount >= limit
+    prefilterFlush
+  end
+end
+
+###################################################################################################
+def prefilterFlush
+  $prefilterDirsCount > 0 or return
+  $prefilterDirsFile.close
+
+  # Run the XTF textIndexer in "prefilterOnly" mode. That way the stylesheets can do all the
+  # dirty work of normalizing the various data formats, and we can use the uniform results.
+  puts "Running prefilter batch of #{$prefilterDirsCount} items."
+  cmd = ["/apps/eschol/erep/xtf/bin/textIndexer", 
+         "-prefilterOnly",
+         "-force",
+         "-dirlist", "#{Dir.pwd}/prefilterDirs.txt",
+         "-index", "eschol5"]
+  Open3.popen2e(*cmd) { |stdin, stdoutAndErr, waitThread|
+    stdin.close()
+
+    # Process each line, looking for BEGIN prefiltered ... END prefiltered
+    shortArk, buf = nil, []
+    outer = []
+    stdoutAndErr.each { |line|
+      if line =~ %r{>>> BEGIN prefiltered.*/(qt\w{8})/}
+        shortArk = $1
+      elsif line =~ %r{>>> END prefiltered}
+        # Found a full block of prefiltered data. This item is ready for indexing.
+        puts "Got data for #{shortArk}."
+        $indexQueue << [shortArk, buf.join]
+        shortArk, buf = nil, []
+      elsif shortArk
+        buf << line
+      else
+        outer << line
+      end
+    }
+    waitThread.join
+    if not waitThread.value.success?
+      puts outer.join
+      raise("Command failed with code #{waitThread.value.exitstatus}")
     end
   }
-  io.close
+
+  # Get ready for more.
+  $prefilterDirsCount = 0
+  $prefilterDirsFile = nil
+end
+
+###################################################################################################
+def prefilterAll
+  Thread.current[:name] = "prefilter thread"
+  $prefilterDirsCount = 0
+  loop do
+    itemID = $prefilterQueue.pop
+    itemID or break
+    prefilterOne(itemID)
+  end
+  prefilterFlush
+  $indexQueue << [nil, nil] # end-of-work
+end
+
+###################################################################################################
+def indexAll
+  Thread.current[:name] = "index thread"
+  loop do
+    itemID, prefilteredData = $indexQueue.pop
+    itemID or break
+    puts "#{itemID}"
+  end
 end
 
 ###################################################################################################
@@ -243,8 +319,8 @@ end
 # Main action begins here
 
 # Check command-line format
-if ARGV.length != 2
-  STDERR.puts "Usage: #{__FILE__} path/to/allStruct.xml path/to/indexDump.xml.gz"
+if ARGV.length != 1
+  STDERR.puts "Usage: #{__FILE__} path/to/allStruct.xml"
   exit 1
 end
 
@@ -253,31 +329,30 @@ puts "Converting units."
 startTime = Time.now
 
 # Load allStruct and traverse it
-DB.transaction do
-  allStructPath = ARGV[0]
-  allStructPath or raise("Must specify path to allStruct")
-  open(allStructPath, "r") { |io|
-    convertUnits(Nokogiri::XML(io, &:noblanks).root, {}, {})
-  }
+if false
+  DB.transaction do
+    allStructPath = ARGV[0]
+    allStructPath or raise("Must specify path to allStruct")
+    open(allStructPath, "r") { |io|
+      convertUnits(Nokogiri::XML(io, &:noblanks).root, {}, {})
+    }
+  end
 end
 
-# Convert all the items
+# Convert all the items that are indexable
 puts "Converting items."
-ALL_UNITs = Set.new(Unit.select(:id).map { |row| row[:id] })
-DB.transaction do
-  nDone = 0
-  iterateRecords(ARGV[1]) { |doc|
-    begin
-      convertItem(doc)
-      nDone += 1
-    rescue Exception => e
-      puts doc
-      raise      
-    end
-    (nDone % 100) == 0 and puts "#{nDone} done."
-  }
-  puts "#{nDone} done."
+# Fire up threads for doing the work in parallel
+Thread.abort_on_exception = true
+prefilterThread = Thread.new { prefilterAll }
+indexThread = Thread.new { indexAll }
+
+QUEUE_DB.fetch("SELECT itemId FROM indexStates WHERE indexName='erep' ORDER BY itemId").each do |row|
+  $prefilterQueue << row[:itemId]
 end
+
+$prefilterQueue << nil  # end-of-queue
+prefilterThread.join
+indexThread.join
 
 # All done.
 puts "  Elapsed: #{Time.now - startTime} sec"
