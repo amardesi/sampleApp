@@ -5,6 +5,7 @@ config/
 Gemfile.lock
 gems/
 node_modules/
+prefilterDirs.txt
 public/css/
 public/js/
 test.db

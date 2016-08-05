@@ -218,6 +218,7 @@ def prefilterFlush
       puts outer.join
       raise("Command failed with code #{waitThread.value.exitstatus}")
     end
+    File.delete "prefilterDirs.txt"
   }
 
   # Get ready for more.
