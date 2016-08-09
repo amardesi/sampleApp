@@ -220,3 +220,7 @@ get "/item/:shortArk" do |shortArk|
     :pub_date => item.pub_date
   })
 end
+
+get "/search/" do
+  genAppPage("Search results", request, {})
+end
