@@ -22,16 +22,15 @@ require 'sequel'
 require 'time'
 require 'yaml'
 
-# Special args
-$testMode = ARGV.delete('--test')
+MAX_BATCH_SIZE = 50   # small for now, 1 thing per batch
 
 # Connect to the databases we'll use
 QUEUE_DB = Sequel.connect(YAML.load_file("config/queueDb.yaml"))
 DB = Sequel.connect(YAML.load_file("config/database.yaml"))
 
 # Queues for thread coordination
-$prefilterQueue = SizedQueue.new($testMode ? 1 : 100)
-$indexQueue = SizedQueue.new($testMode ? 1 : 100)
+$prefilterQueue = SizedQueue.new(100)
+$indexQueue = SizedQueue.new(100)
 
 # Make puts thread-safe
 $stdoutMutex = Mutex.new
@@ -71,6 +70,12 @@ end
 
 class ItemAuthor < Sequel::Model
   unrestrict_primary_key
+end
+
+class Issue < Sequel::Model
+end
+
+class Section < Sequel::Model
 end
 
 ###################################################################################################
@@ -195,7 +200,6 @@ def prefilterBatch(batch)
         shortArk = $1
       elsif line =~ %r{>>> END prefiltered}
         # Found a full block of prefiltered data. This item is ready for indexing.
-        puts "Got data for #{shortArk}."
         $indexQueue << [shortArk, buf.join]
         shortArk, buf = nil, []
       elsif shortArk
@@ -215,13 +219,13 @@ end
 
 ###################################################################################################
 def prefilterAll
-  Thread.current[:name] = "prefilter thread"
+  Thread.current[:name] = "prefilter thread"  # label all stdout from this thread
   batch = []
   loop do
     itemID = $prefilterQueue.pop
     itemID or break
     batch << itemID
-    if batch.size >= ($testMode ? 1 : 50)
+    if batch.size >= 50
       prefilterBatch(batch)
       batch = []
     end
@@ -231,13 +235,171 @@ def prefilterAll
 end
 
 ###################################################################################################
+def traverseText(node, buf)
+  return if node['meta'] == "yes" || node['index'] == "no"
+  node.text? and buf << node.to_s.strip + "\n"
+  node.children.each { |child| traverseText(child, buf) }
+end
+
+###################################################################################################
+def emptyBatch(batch)
+  batch[:items] = []
+  batch[:idxData] = "["
+  batch[:idxDataSize] = 0
+  return batch
+end
+
+###################################################################################################
+def indexItem(itemID, prefilteredData, batch)
+  prefilteredData.sub! "<erep-article>", "<erep-article xmlns:xtf=\"http://cdlib.org/xtf\">"
+  puts "#{itemID}"
+
+  # Parse the metadata (and toss the namespaces; they just make things harder to code)
+  data = Nokogiri::XML(prefilteredData, &:noblanks)
+  data.remove_namespaces!
+
+  data = Class.new {
+    def initialize(prefilteredData)
+      doc = Nokogiri::XML(prefilteredData, &:noblanks)
+      doc.remove_namespaces!
+      @root = doc.root
+    end
+
+    def single(name)
+      els = @root.xpath("meta/#{name}[@meta='yes']")
+      els.length <= 1 or puts("Warning: multiple #{name.inspect} elements found.")
+      return els[0] ? els[0].text : nil
+    end
+
+    def multiple(name)
+      return @root.xpath("meta/#{name}[@meta='yes']").map { |el| el.text }
+    end
+
+    def any(name)
+      return @root.xpath("meta/#{name}[@meta='yes']").length > 0
+    end
+
+    def root
+      return @root
+    end    
+  }.new(prefilteredData)
+
+  attrs = {}
+  data.single("contentExists") == "yes" and attrs[:contentExists] = true
+  data.single("pdfExists"    ) == "yes" and attrs[:pdfExists] = true
+  data.single("peerReview"   ) == "yes" and attrs[:peerReviewed] = true
+  data.single("language"     )          and attrs[:language] = data.single("language")
+  data.any("facet-discipline")          and attrs[:disciplines] = data.multiple("facet-discipline")
+
+  # Filter out "n/a" abstracts
+  data.single("description") && data.single("description").size > 3 and attrs[:abstract] = data.single("description")
+
+  # Populate the Item model instance
+  dbItem = Item.new
+  dbItem[:id]           = itemID
+  dbItem[:source]       = data.single("source")
+  dbItem[:status]       = data.single("pubStatus") || "unknown",
+  dbItem[:title]        = data.single("title"),
+  dbItem[:content_type] = data.single("format"),
+  dbItem[:genre]        = data.single("type"),
+  dbItem[:pub_date]     = data.single("date") || "1901-01-01",
+  dbItem[:eschol_date]  = data.single("datestamp") || "1901-01-01", #FIXME: Think about this carefully. What's eschol_date for?
+  dbItem[:rights]       = data.single("rights") || "public",
+  dbItem[:attrs]        = JSON.generate(attrs)
+
+  # Populate ItemAuthor model instances
+  dbAuthors = data.multiple("creator").each_with_index { |name, idx|
+    ItemAuthor.new { |auth|
+      auth[:item_id] = itemID
+      auth[:attrs] = JSON.generate({name: name})
+      auth[:ordering] = idx
+    }
+  }
+
+  # For eschol journals, populate the issue and section models.
+  issue = section = nil
+  if data.single("pubType") == "journal"
+    issue = Issue.new
+    issue[:unit_id] = data.single("entityOnly")
+    issue[:volume]  = data.single("volume")
+    issue[:issue]   = data.single("issue")
+    issue[:pub_date] = data.single("date") || "1901-01-01"
+
+    section = Section.new
+    section[:name]  = data.single("sectionHeader") ? data.single("sectionHeader") : "default"
+    section[:order] = data.single("document-order") ? data.single("document-order") : 1
+  end
+
+  # Process all the text nodes
+  text = ""
+  traverseText(data.root, text)
+
+  # Create JSON for the full text index
+  idxItem = {
+    type:          "add",   # in CloudSearch land this means "add or update"
+    id:            itemID,
+    fields: {
+      title:         dbItem[:title] || "",
+      authors:       data.multiple("creator"),
+      abstract:      attrs[:abstract] || "",
+      content_types: data.multiple("format"),
+      disciplines:   attrs[:disciplines] ? attrs[:disciplines].map { |ds| ds[/^\d+/] } : [""], # only the numeric parts
+      peer_reviewed: attrs[:peerReviewed] ? 1 : 0,
+      pub_date:      "#{dbItem[:pub_date]}T00:00:00Z",
+      pub_year:      dbItem[:pub_date][/^\d\d\d\d/],
+      rights:        dbItem[:rights],
+      sort_author:   (data.multiple("creator")[0] || "").gsub(/[^\w ]/, '').downcase,
+      units:         data.multiple("facet-fullAffil").map { |fa| fa.sub(/.*::/, "") },
+      text:          text
+    }
+  }
+  idxData = JSON.generate(idxItem)
+
+  # If this item won't fit in the current batch, send that batch off.
+  if batch[:idxDataSize] + idxData.size > MAX_BATCH_SIZE
+    puts "Considering batch with #{batch[:items].size} items."
+    batch[:items].empty? or processBatch(batch)
+    emptyBatch(batch)
+  end
+
+  # Now add this item to the batch
+  batch[:items].empty? or batch[:idxData] << ",\n"  # Separator between records
+  batch[:idxData] << idxData
+  batch[:idxDataSize] += idxData.size
+  batch[:items] << { dbItem: dbItem, dbAuthors: dbAuthors, dbIssue: issue, dbSection: section }
+  puts "data size: #{batch[:idxDataSize]}"
+end
+
+###################################################################################################
 def indexAll
-  Thread.current[:name] = "index thread"
+  Thread.current[:name] = "index thread"  # label all stdout from this thread
+  batch = emptyBatch({})
   loop do
     itemID, prefilteredData = $indexQueue.pop
     itemID or break
-    puts "#{itemID}"
+    indexItem(itemID, prefilteredData, batch)
   end
+  batch.items.empty? or processBatch(batch)
+end
+
+###################################################################################################
+def processBatch(batch)
+
+  # Finish the data buffer, and send to AWS
+  batch[:idxData] << "]"
+
+#curl -X POST --upload-file movie-data-2013.json doc-movies-123456789012.us-east-1.cloudsearch.amazonaws.com/2013-01-01/documents/batch --header "Content-Type:application/json"
+  url = "http:///2013-01-01/documents/batch"
+  host = "doc-eschol5-test-u5sqhz5emqzdh4bfij7uxsazny.us-west-2.cloudsearch.amazonaws.com"
+  puts "Posting #{batch[:idxDataSize]} characters of data."
+  puts batch[:idxData]
+  req = Net::HTTP::Post.new("/2013-01-01/documents/batch", initheader = {'Content-Type' =>'application/json'})
+  req.body = batch[:idxData]
+  response = Net::HTTP.new(host, 80).start {|http| http.request(req) }
+  puts "response: #{response}"
+  puts response.body
+  response.code == "200" or fail
+  exit 1
 end
 
 ###################################################################################################
@@ -308,48 +470,59 @@ def convertItem(doc)
 end
 
 ###################################################################################################
-# Main action begins here
+def convertUnits
+  # Let the user know what we're doing
+  puts "Converting units."
+  startTime = Time.now
 
-# Check command-line format
-if ARGV.length != 1
-  STDERR.puts "Usage: #{__FILE__} path/to/allStruct.xml"
-  exit 1
-end
-
-# Let the user know what we're doing
-puts "Converting units."
-startTime = Time.now
-
-# Load allStruct and traverse it
-if false
+  # Load allStruct and traverse it
   DB.transaction do
-    allStructPath = ARGV[0]
-    allStructPath or raise("Must specify path to allStruct")
+    allStructPath = "/apps/eschol/erep/xtf/style/textIndexer/mapping/allStruct.xml"
     open(allStructPath, "r") { |io|
       convertUnits(Nokogiri::XML(io, &:noblanks).root, {}, {})
     }
   end
 end
 
-# Convert all the items that are indexable
-puts "Converting items."
-# Fire up threads for doing the work in parallel
-Thread.abort_on_exception = true
-prefilterThread = Thread.new { prefilterAll }
-indexThread = Thread.new { indexAll }
+###################################################################################################
+def convertItems
+  # Let the user know what we're doing
+  puts "Converting items."
 
-QUEUE_DB.fetch("SELECT itemId, time FROM indexStates WHERE indexName='erep' ORDER BY itemId").each do |row|
-  erepTime = Time.at(row[:time].to_i).to_datetime
-  shortArk = row[:itemId].sub(%r{^ark:/?13030/}, '')
-  item = Item[shortArk]
-  if !item || item.last_indexed < erepTime
-    $prefilterQueue << shortArk
+  # Fire up threads for doing the work in parallel
+  Thread.abort_on_exception = true
+  prefilterThread = Thread.new { prefilterAll }
+  indexThread = Thread.new { indexAll }
+
+  # Convert all the items that are indexable
+  QUEUE_DB.fetch("SELECT itemId, time FROM indexStates WHERE indexName='erep' ORDER BY itemId").each do |row|
+    erepTime = Time.at(row[:time].to_i).to_datetime
+    shortArk = row[:itemId].sub(%r{^ark:/?13030/}, '')
+    item = Item[shortArk]
+    if !item || item.last_indexed.nil? || item.last_indexed < erepTime
+      $prefilterQueue << shortArk
+    end
   end
+
+  $prefilterQueue << nil  # end-of-queue
+  prefilterThread.join
+  indexThread.join
 end
 
-$prefilterQueue << nil  # end-of-queue
-prefilterThread.join
-indexThread.join
+###################################################################################################
+# Main action begins here
 
-# All done.
-puts "  Elapsed: #{Time.now - startTime} sec"
+startTime = Time.now
+
+case ARGV[0]
+  when "--units"
+    convertUnits
+  when "--items"
+    convertItems
+  else
+    STDERR.puts "Usage: #{__FILE__} --units|--items"
+    exit 1
+end
+
+puts "Elapsed: #{Time.now - startTime} sec."
+puts "Done."
