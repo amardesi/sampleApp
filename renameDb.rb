@@ -12,7 +12,7 @@ require 'sequel'
 require 'yaml'
 
 # Parse command line
-if ARGV.length != 1
+if ARGV.length != 2
   STDERR.puts "Usage: #{__FILE__} db1 db2"
   exit 1
 end
