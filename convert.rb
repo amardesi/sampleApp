@@ -23,33 +23,33 @@ require 'sequel'
 require 'time'
 require 'yaml'
 
-MAX_BATCH_SIZE = 4500*1024   # limit is 5 megs, but let's keep it around 4.5 megs max
-MAX_TEXT_SIZE  = 950*1024    # limit on a single doc is 1 meg; allocate most of that to text.
+# Max size (in bytes, I think) if a batch to send to AWS CloudSearch.
+# According to the docs the absolute limit is 5 megs, so let's back off a 
+# little bit from that and say 4.5 megs.
+MAX_BATCH_SIZE = 4500*1024
 
-# Connect to the databases we'll use
+# Max amount of full text we'll send with any single doc. AWS limit is 1 meg, so let's
+# go a little short of that so we've got room for plenty of metadata.
+MAX_TEXT_SIZE  = 950*1024
+
+# The main database we're inserting data into
 DB = Sequel.connect(YAML.load_file("config/database.yaml"))
-DB.logger = Logger.new($stdout)  # for debugging only
+#DB.logger = Logger.new($stdout)  # enable this to print out every SQL statement executed (for debugging)
+
+# The old eschol queue database, from which we can get a list of indexable ARKs
 QUEUE_DB = Sequel.connect(YAML.load_file("config/queueDb.yaml"))
 
 # Queues for thread coordination
 $prefilterQueue = SizedQueue.new(100)
 $indexQueue = SizedQueue.new(100)
 
-# Make puts thread-safe
+# Make puts thread-safe, and prepend each line with the thread it's coming from.
 $stdoutMutex = Mutex.new
 def puts(*args)
   $stdoutMutex.synchronize { 
     Thread.current[:name] and STDOUT.write("[#{Thread.current[:name]}] ")
     super(*args) 
   }
-end
-
-###################################################################################################
-# Monkey patches to make Nokogiri even more elegant
-class Nokogiri::XML::Node
-  def text_at(xpath)
-    at(xpath) ? at(xpath).text : nil
-  end
 end
 
 ###################################################################################################
@@ -128,7 +128,7 @@ def convertUnits(el, parentMap, childMap)
   id = el[:id] || el[:ref] || "root"
   #puts "name=#{el.name} id=#{id.inspect} name=#{el[:label].inspect}"
 
-  # Handle regular units
+  # Handle the root of the unit hierarchy
   if el.name == "allStruct"
     Unit.create(
       :id => "root",
@@ -137,6 +137,7 @@ def convertUnits(el, parentMap, childMap)
       :is_active => true,
       :attrs => nil
     )
+  # Handle regular units
   elsif el.name == "div"
     attrs = {}
     el[:directSubmit] and attrs[:directSubmit] = el[:directSubmit]
@@ -148,6 +149,7 @@ def convertUnits(el, parentMap, childMap)
       :is_active => el[:directSubmit] != "moribund",
       :attrs => JSON.generate(attrs)
     )
+  # Multiple-parent units
   elsif el.name == "ref"
     # handled elsewhere
   end
@@ -228,23 +230,33 @@ def prefilterBatch(batch)
 end
 
 ###################################################################################################
+# Run the XTF index prefilters on every item in the queue, and pass the results on to the next
+# queue (indexing).
 def prefilterAll
   Thread.current[:name] = "prefilter thread"  # label all stdout from this thread
+
+  # We batch up the IDs so we can prefilter a bunch at once, for efficiency.
   batch = []
   loop do
+    # Grab something from the queue
     itemID, timestamp = $prefilterQueue.pop
     itemID or break
+
+    # Add it to the batch. If we've got enough, go run the prefilters on that batch.
     batch << [itemID, timestamp]
     if batch.size >= 50
       prefilterBatch(batch)
       batch = []
     end
   end
+
+  # Finish any remaining at the end.
   batch.empty? or prefilterBatch(batch)
   $indexQueue << [nil, nil, nil] # end-of-work
 end
 
 ###################################################################################################
+# Traverse the XML output from prefilters, looking for indexable text to add to the buffer.
 def traverseText(node, buf)
   return if node['meta'] == "yes" || node['index'] == "no"
   node.text? and buf << node.to_s.strip + "\n"
@@ -252,6 +264,7 @@ def traverseText(node, buf)
 end
 
 ###################################################################################################
+# Empty out an index batch
 def emptyBatch(batch)
   batch[:items] = []
   batch[:idxData] = "["
@@ -260,34 +273,47 @@ def emptyBatch(batch)
 end
 
 ###################################################################################################
+# A little class to simplify grabbing metadata from prefiltered documents.
 class MetaAccess
+
+  # Parse prefiltered data into XML, and remove the namespaces.
   def initialize(prefilteredData)
     doc = Nokogiri::XML(prefilteredData, &:noblanks)
     doc.remove_namespaces!
     @root = doc.root
   end
 
+  # Get the text content of a metadata field which we expect only one of
   def single(name)
     els = @root.xpath("meta/#{name}[@meta='yes']")
     els.length <= 1 or puts("Warning: multiple #{name.inspect} elements found.")
     return els[0] ? els[0].content : nil
   end
 
+  # Get an array of the content from a metadata field which we expect zero or more of.
   def multiple(name)
     return @root.xpath("meta/#{name}[@meta='yes']").map { |el| el.text }
   end
 
+  # Check if there are any metadata elements with the given name
   def any(name)
     return @root.xpath("meta/#{name}[@meta='yes']").length > 0
   end
 
+  # The root of the tree
   def root
     return @root
   end    
 end
 
 ###################################################################################################
+# Extract metadata for an item, and add it to the current index batch.
+# Note that we create, but don't yet add, records to our database. We put off really inserting
+# into the database until the batch has been successfully processed by AWS.
 def indexItem(itemID, timestamp, prefilteredData, batch)
+
+  # Add in the namespace declaration to the individual article (since we're taking the articles
+  # out of their outer context)
   prefilteredData.sub! "<erep-article>", "<erep-article xmlns:xtf=\"http://cdlib.org/xtf\">"
   puts "#{itemID}"
 
@@ -298,6 +324,7 @@ def indexItem(itemID, timestamp, prefilteredData, batch)
     exit 1
   end
 
+  # Grab the stuff we're jamming into the JSON 'attrs' field
   attrs = {}
   data.multiple("contentExists")[0] == "yes" and attrs[:contentExists] = true
   data.single("pdfExists"    ) == "yes" and attrs[:pdfExists] = true
@@ -371,7 +398,7 @@ def indexItem(itemID, timestamp, prefilteredData, batch)
   }
   idxData = JSON.generate(idxItem)
 
-  # If this item won't fit in the current batch, send that batch off.
+  # If this item won't fit in the current batch, send the current batch off and clear it.
   if batch[:idxDataSize] + idxData.size > MAX_BATCH_SIZE
     batch[:items].empty? or processBatch(batch)
     emptyBatch(batch)
@@ -394,14 +421,20 @@ def indexItem(itemID, timestamp, prefilteredData, batch)
 end
 
 ###################################################################################################
+# Index all the items in our queue
 def indexAll
   Thread.current[:name] = "index thread"  # label all stdout from this thread
   batch = emptyBatch({})
   loop do
+    # Grab an item from the input queue
     itemID, timestamp, prefilteredData = $indexQueue.pop
     itemID or break
+
+    # Extract data and index it (in batches)
     indexItem(itemID, timestamp, prefilteredData, batch)
   end
+
+  # Finish off the last batch.
   batch.items.empty? or processBatch(batch)
 end
 
@@ -419,8 +452,11 @@ def processBatch(batch)
   puts "response: #{response}"
   response.code == "200" or fail("Post to CloudSearch failed: #{response}: #{response.body}")
 
-  # Database processing
+  # Now that we've successfully added the documents to AWS CloudSearch, insert records into
+  # our database. For efficience, do all the records in a single transaction.
   DB.transaction do
+
+    # Do each item in the batch
     batch[:items].each { |data|
       itemID = data[:dbItem][:id]
 
@@ -487,6 +523,7 @@ def processBatch(batch)
 end
 
 ###################################################################################################
+# Main driver for unit conversion.
 def convertAllUnits
   # Let the user know what we're doing
   puts "Converting units."
@@ -502,6 +539,7 @@ def convertAllUnits
 end
 
 ###################################################################################################
+# Main driver for item conversion
 def convertAllItems
   # Let the user know what we're doing
   puts "Converting items."
