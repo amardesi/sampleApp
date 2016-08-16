@@ -37,8 +37,8 @@ var facetData = [
   {id: 9, fieldsetLabel: "Reuse License", fieldName: "reuseLicense"},
 ]
 
-var CurrentSearchTerms = React.createClass({
-  render: function() {
+class CurrentSearchTerms extends React.Component {
+  render() {
     return (
       <div className="currentSearchTerms">
         <h3>Search</h3>
@@ -49,10 +49,10 @@ var CurrentSearchTerms = React.createClass({
       </div>
     )
   }
-});
+}
 
-var FacetItem = React.createClass({
-  render: function() {
+class FacetItem extends React.Component {
+  render() {
     return (
       <div className="facetItem">
         <label htmlFor={this.props.value}>{this.props.label}</label>
@@ -60,10 +60,10 @@ var FacetItem = React.createClass({
       </div>
     );
   }
-});
+}
 
-var FacetRange = React.createClass({
-  render: function() {
+class FacetRange extends React.Component {
+  render() {
     return (
       <div className="facetRange">
         <label htmlFor={this.props.start.value}>{this.props.start.label}</label>
@@ -73,10 +73,10 @@ var FacetRange = React.createClass({
       </div>
     );
   }
-});
+}
 
-var FacetHierarchy = React.createClass({
-  render: function() {
+class FacetHierarchy extends React.Component {
+  render() {
     var childrenNodes;
     if (this.props.inputItems !== undefined) {
       childrenNodes = this.props.inputItems.map(function(input) {
@@ -95,14 +95,14 @@ var FacetHierarchy = React.createClass({
       </div>
     );
   }
-});
+}
 
-var FacetFieldset = React.createClass({
-  showFacetItems: function(e) {
+class FacetFieldset extends React.Component {
+  showFacetItems(e) {
     $(e.currentTarget).siblings('.facetItems').slideToggle();
   },
 
-  render: function() {
+  render() {
     var facetItemNodes;
     if (this.props.data.inputItems !== undefined) {
       if (this.props.data.display === "range") {
@@ -131,10 +131,10 @@ var FacetFieldset = React.createClass({
       </fieldset>
     );
   }
-});
+}
 
-var FacetForm = React.createClass({
-  render: function() {
+class FacetForm extends React.Component {
+  render() {
     return (
       <form className="facetForm">
         {this.props.data.map(function(facetfieldset) {
@@ -143,10 +143,10 @@ var FacetForm = React.createClass({
       </form>
     );
   }
-});
+}
 
-var SearchResultsSidebar = React.createClass({
-  render: function() {
+class SearchResultsSidebar extends React.Component {
+  render() {
     return (
       <div className="searchResultSidebar col-xs-3">
         <CurrentSearchTerms />
@@ -154,19 +154,19 @@ var SearchResultsSidebar = React.createClass({
       </div>
     );
   }
-});
+}
 
-var Pagination = React.createClass({
-  render: function() {
+class Pagination extends React.Component {
+  render() {
     return (
       <div className="pagination">
         lalala pagination goes here!
       </div>
     );
   }
-});
+}
 
-var ViewOptions = React.createClass({
+class ViewOptions extends React.Component({
   render: function() {
     return (
       <div className="viewOptions row">
@@ -178,10 +178,10 @@ var ViewOptions = React.createClass({
       </div>
     );
   }
-});
+}
 
-var InformationResultsSet = React.createClass({
-  render: function() {
+class InformationResultsSet extends React.Component {
+  render() {
     return (  
       <div className="informationResultsSet">
         <h2>Information</h2>
@@ -192,9 +192,9 @@ var InformationResultsSet = React.createClass({
       </div>
     );
   }
-});
+}
 
-var ResearchResultsSet = React.createClass({
+class ResearchResultsSet extends React.Component {
   render: function() {
     return (  
       <div className="researchResultsSet">
@@ -213,10 +213,10 @@ var ResearchResultsSet = React.createClass({
       </div>
     );
   }
-});
+}
 
-var SearchResultsSet = React.createClass({
-  render: function() {
+class SearchResultsSet extends React.Component {
+  render() {
     return (
       <div className="searchResultsSet col-xs-9">
         <ViewOptions />
@@ -225,10 +225,10 @@ var SearchResultsSet = React.createClass({
       </div>
     );
   }
-});
+}
 
-var SearchResults = React.createClass({
-  render: function() {
+class SearchResults extends React.Component {
+  render() {
     return (
       <div className="searchResults">
         <SearchResultsSidebar data={this.props.data} />
@@ -236,7 +236,7 @@ var SearchResults = React.createClass({
       </div>
     );
   }
-});
+}
 
 ReactDOM.render(
   <SearchResults data={facetData} />,
