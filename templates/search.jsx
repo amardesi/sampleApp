@@ -100,7 +100,7 @@ class FacetHierarchy extends React.Component {
 class FacetFieldset extends React.Component {
   showFacetItems(e) {
     $(e.currentTarget).siblings('.facetItems').slideToggle();
-  },
+  }
 
   render() {
     var facetItemNodes;
@@ -166,8 +166,8 @@ class Pagination extends React.Component {
   }
 }
 
-class ViewOptions extends React.Component({
-  render: function() {
+class ViewOptions extends React.Component {
+  render() {
     return (
       <div className="viewOptions row">
         <label htmlFor="sort">Sort By:</label>
@@ -195,7 +195,7 @@ class InformationResultsSet extends React.Component {
 }
 
 class ResearchResultsSet extends React.Component {
-  render: function() {
+  render() {
     return (  
       <div className="researchResultsSet">
         <h2>Research</h2>
